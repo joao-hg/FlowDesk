@@ -17,7 +17,6 @@ async function syncToNotion() {
             }
         }));
 
-        // Para uma database, devemos criar uma PÁGINA dentro dela
         const response = await fetch('https://api.notion.com/v1/pages', {
             method: 'POST',
             headers: {
@@ -26,7 +25,7 @@ async function syncToNotion() {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                parent: { database_id: DATABASE_ID },
+                parent: { page_id: DATABASE_ID }, // Modificado de database_id para page_id
                 properties: {
                     title: [
                         { text: { content: `Sync: ${new Date().toLocaleString('pt-BR')}` } }
@@ -38,26 +37,20 @@ async function syncToNotion() {
 
         if (!response.ok) {
             const error = await response.json();
-            // Fallback caso a propriedade "title" tenha outro nome
-            if (error.message.includes('property')) {
-                const responseFallback = await fetch('https://api.notion.com/v1/pages', {
-                    method: 'POST',
+            // Fallback para append blocks direto na página caso não possa criar subpáginas
+            if (error.code === 'object_not_found' || error.message.includes('parent')) {
+                const responseFallback = await fetch(`https://api.notion.com/v1/blocks/${DATABASE_ID}/children`, {
+                    method: 'PATCH',
                     headers: {
                         'Authorization': `Bearer ${NOTION_TOKEN}`,
                         'Notion-Version': '2022-06-28',
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({
-                        parent: { database_id: DATABASE_ID },
-                        properties: {
-                            Name: { title: [{ text: { content: `Sync: ${new Date().toLocaleString('pt-BR')}` } }] }
-                        },
-                        children: blocks
-                    })
+                    body: JSON.stringify({ children: blocks })
                 });
                 if (!responseFallback.ok) {
                     const fallbackError = await responseFallback.json();
-                    console.error('Erro ao sincronizar com o Notion (Database):', JSON.stringify(fallbackError, null, 2));
+                    console.error('Erro ao sincronizar com o Notion (Page Fallback):', JSON.stringify(fallbackError, null, 2));
                     return;
                 }
             } else {
